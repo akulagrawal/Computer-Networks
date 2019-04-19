@@ -22,12 +22,9 @@
 //
 //       n0 ----------- n1
 //            1 Mbps
-//             5 ms
+//            10 ms
 //
 // - Flow from n0 to n1 using BulkSendApplication.
-// - Tracing of queues and packet receptions to file "tcp-pcap-nanosec-example.pcap"
-//     when tracing is turned on.
-// - Trace file timestamps are recorded in nanoseconds, when requested
 //
 
 
@@ -48,10 +45,44 @@
 #include "ns3/network-module.h"
 #include "ns3/flow-monitor-helper.h"
 #include "ns3/on-off-helper.h"
+#include "ns3/flow-monitor-module.h"
 
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE ("Application3");   // $export NS_LOG=Application3 to debug
+
+static bool firstCwnd = true;
+static bool firstSshThr = true;
+static Ptr<OutputStreamWrapper> cWndStream;
+static Ptr<OutputStreamWrapper> ssThreshStream;
+static uint32_t cWndValue;
+static uint32_t ssThreshValue;
+
+static void
+CwndTracer (uint32_t oldval, uint32_t newval)
+{
+  if (firstCwnd)
+    {
+      *cWndStream->GetStream () << "0.0 " << oldval << std::endl;
+      firstCwnd = false;
+    }
+  *cWndStream->GetStream () << Simulator::Now ().GetSeconds () << " " << newval << std::endl;
+  cWndValue = newval;
+
+  if (!firstSshThr)
+    {
+      *ssThreshStream->GetStream () << Simulator::Now ().GetSeconds () << " " << ssThreshValue << std::endl;
+    }
+}
+
+static void
+TraceCwnd (std::string cwnd_tr_file_name)
+{
+  AsciiTraceHelper ascii;
+  cWndStream = ascii.CreateFileStream (cwnd_tr_file_name.c_str ());
+  Config::ConnectWithoutContext ("/NodeList/1/$ns3::TcpL4Protocol/SocketList/0/CongestionWindow", MakeCallback (&CwndTracer));
+}
+
 
 int
 main (int argc, char *argv[])
@@ -59,8 +90,9 @@ main (int argc, char *argv[])
 
   bool tracing = true;
   bool nanosec = false;
+  bool pcap = true;
   uint32_t maxBytes = 0;
-  std::string transport_prot = "TcpNewReno";
+  std::string transport_prot = "TcpWestwood";
 
 //
 // Allow the user to override any of the defaults at
@@ -126,7 +158,7 @@ main (int argc, char *argv[])
   PointToPointHelper pointToPoint;
   pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("1Mbps"));
   pointToPoint.SetChannelAttribute ("Delay", StringValue ("10ms"));
-  pointToPoint.SetQueue ("ns3::DropTailQueue");
+  pointToPoint.SetQueue ("ns3::DropTailQueue", "MaxSize", StringValue ("10KB"));
 
   NetDeviceContainer devices;
   devices = pointToPoint.Install (nodes);
@@ -207,8 +239,19 @@ main (int argc, char *argv[])
 //
   if (tracing)
     {
-      AsciiTraceHelper ascii;
-      pointToPoint.EnablePcapAll ("Application3", false);  // void EnablePcapAll (std::string prefix, bool promiscuous = false);
+      std::ofstream ascii;
+      Ptr<OutputStreamWrapper> ascii_wrap;
+      ascii.open ((transport_prot + "-ascii").c_str ());
+      ascii_wrap = new OutputStreamWrapper ((transport_prot + "-ascii").c_str (),
+                                            std::ios::out);
+      internet.EnableAsciiIpv4All (ascii_wrap);
+
+      Simulator::Schedule (Seconds (0.00001), &TraceCwnd, transport_prot + "-cwnd.data");
+    }
+
+  if (pcap)
+    {
+      pointToPoint.EnablePcapAll (transport_prot, false);  // void EnablePcapAll (std::string prefix, bool promiscuous = false);
     }
 
 // Flow monitor
@@ -224,10 +267,23 @@ main (int argc, char *argv[])
   Simulator::Stop (MilliSeconds (1800.0));
 
   Simulator::Run ();
+
+  Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowHelper.GetClassifier ());
+  std::map<FlowId, FlowMonitor::FlowStats> stats = flowMonitor->GetFlowStats ();
+  std::cout << std::endl << "Flow monitor output:" << std::endl;
+  std::cout << "Tx Packets:   " << stats[1].txPackets << std::endl;
+  std::cout << "Tx Bytes:     " << stats[1].txBytes << std::endl;
+  std::cout << "Offered Load: " << stats[1].txBytes * 8.0 / (stats[1].timeLastTxPacket.GetSeconds () - stats[1].timeFirstTxPacket.GetSeconds ()) / 1000000 << " Mbps" << std::endl;
+  std::cout << "Rx Packets:   " << stats[1].rxPackets << std::endl;
+  std::cout << "Rx Bytes:     " << stats[1].rxBytes<< std::endl;
+  std::cout << "Throughput:   " << stats[1].rxBytes * 8.0 / (stats[1].timeLastRxPacket.GetSeconds () - stats[1].timeFirstRxPacket.GetSeconds ()) / 1000000 << " Mbps" << std::endl;
+  std::cout << "Mean delay:   " << stats[1].delaySum.GetSeconds () / stats[1].rxPackets << std::endl;
+  std::cout << "Mean jitter:  " << stats[1].jitterSum.GetSeconds () / (stats[1].rxPackets - 1) << std::endl;
+
+  flowMonitor->SerializeToXmlFile(transport_prot + ".flowMonitor", true, true);
+
   Simulator::Destroy ();
   NS_LOG_INFO ("Done.");
-
-  flowMonitor->SerializeToXmlFile("Application3.xml", true, true);
 
   Ptr<PacketSink> sinkptr = DynamicCast<PacketSink> (sinkApps.Get (0));
   std::cout << "Total Bytes Received on FTP Channel: " << sinkptr->GetTotalRx () << std::endl;
