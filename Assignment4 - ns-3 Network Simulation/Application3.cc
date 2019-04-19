@@ -51,7 +51,7 @@
 
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE ("Application3");		// $export NS_LOG=Application3 to debug
+NS_LOG_COMPONENT_DEFINE ("Application3");   // $export NS_LOG=Application3 to debug
 
 int
 main (int argc, char *argv[])
@@ -60,6 +60,7 @@ main (int argc, char *argv[])
   bool tracing = true;
   bool nanosec = false;
   uint32_t maxBytes = 0;
+  std::string transport_prot = "TcpNewReno";
 
 //
 // Allow the user to override any of the defaults at
@@ -70,7 +71,37 @@ main (int argc, char *argv[])
   cmd.AddValue ("nanosec",  "Flag to use nanosecond timestamps for pcap as default", nanosec);
   cmd.AddValue ("maxBytes",
                 "Total number of bytes for application to send", maxBytes);
+  cmd.AddValue ("prot", "Transport protocol to use: TcpNewReno, TcpHybla, TcpWestwood, TcpScalable, TcpVegas ", transport_prot);
   cmd.Parse (argc, argv);
+
+  if (transport_prot.compare ("TcpNewReno") == 0)
+    {
+      Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpNewReno::GetTypeId ()));
+    }
+    else if (transport_prot.compare ("TcpHybla") == 0)
+    {
+      Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpHybla::GetTypeId ()));
+    }
+    else if (transport_prot.compare ("TcpWestwood") == 0)
+    {
+    // the default protocol type in ns3::TcpWestwood is WESTWOOD
+    // for WESTWOODPLUS, add Config::SetDefault ("ns3::TcpWestwood::ProtocolType", EnumValue (TcpWestwood::WESTWOODPLUS));
+      Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpWestwood::GetTypeId ()));
+      Config::SetDefault ("ns3::TcpWestwood::FilterType", EnumValue (TcpWestwood::TUSTIN));
+    }
+    else if (transport_prot.compare ("TcpScalable") == 0)
+    {
+      Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpScalable::GetTypeId ()));
+    }
+    else if (transport_prot.compare ("TcpVegas") == 0)
+    {
+      Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TcpVegas::GetTypeId ()));
+    }
+    else
+    {
+      NS_LOG_DEBUG ("Invalid TCP version");
+      exit (1);
+    }
 
 //
 // If requested via the --nanosec cmdline flag, generate nanosecond timestamp for pcap traces
@@ -95,6 +126,7 @@ main (int argc, char *argv[])
   PointToPointHelper pointToPoint;
   pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("1Mbps"));
   pointToPoint.SetChannelAttribute ("Delay", StringValue ("10ms"));
+  pointToPoint.SetQueue ("ns3::DropTailQueue");
 
   NetDeviceContainer devices;
   devices = pointToPoint.Install (nodes);
