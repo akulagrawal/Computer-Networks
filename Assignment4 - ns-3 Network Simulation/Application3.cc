@@ -21,7 +21,7 @@
 // Network topology
 //
 //       n0 ----------- n1
-//            500 Kbps
+//            1 Mbps
 //             5 ms
 //
 // - Flow from n0 to n1 using BulkSendApplication.
@@ -46,16 +46,18 @@
 #include "ns3/internet-module.h"
 #include "ns3/applications-module.h"
 #include "ns3/network-module.h"
+#include "ns3/flow-monitor-helper.h"
+#include "ns3/on-off-helper.h"
 
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE ("TcpPcapNanosecExample");
+NS_LOG_COMPONENT_DEFINE ("Application3");		// $export NS_LOG=Application3 to debug
 
 int
 main (int argc, char *argv[])
 {
 
-  bool tracing = false;
+  bool tracing = true;
   bool nanosec = false;
   uint32_t maxBytes = 0;
 
@@ -91,7 +93,7 @@ main (int argc, char *argv[])
 // Explicitly create the point-to-point link required by the topology (shown above).
 //
   PointToPointHelper pointToPoint;
-  pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("500Kbps"));
+  pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("1Mbps"));
   pointToPoint.SetChannelAttribute ("Delay", StringValue ("5ms"));
 
   NetDeviceContainer devices;
@@ -142,17 +144,43 @@ main (int argc, char *argv[])
   if (tracing)
     {
       AsciiTraceHelper ascii;
-      pointToPoint.EnablePcapAll ("tcp-pcap-nanosec-example", false);  // void EnablePcapAll (std::string prefix, bool promiscuous = false);
+      pointToPoint.EnablePcapAll ("akul", false);  // void EnablePcapAll (std::string prefix, bool promiscuous = false);
     }
+
+  // Flow monitor
+  Ptr<FlowMonitor> flowMonitor;
+  FlowMonitorHelper flowHelper;
+  flowMonitor = flowHelper.InstallAll();
+
+  uint16_t cbrPort = 8000;
+  OnOffHelper onOff ("ns3::UdpSocketFactory", InetSocketAddress (i.GetAddress(1), cbrPort));
+  uint32_t packetSize = 512;
+  onOff.SetConstantRate (300, packetSize);
+
+  ApplicationContainer cbr;
+  cbr.Add (onOff.Install (nodes.Get (0)));
+
+  // Start CBR
+  cbr.Start (MilliSeconds (0));
+  cbr.Stop (MilliSeconds (100));
+
+  PacketSinkHelper sink11 ("ns3::UdpSocketFactory",
+                         InetSocketAddress (Ipv4Address::GetAny (), cbrPort));
+  ApplicationContainer sinkApps11 = sink11.Install (nodes.Get (1));
+  sinkApps11.Start (MilliSeconds (0));
+  sinkApps11.Stop (MilliSeconds (100));
 
 //
 // Now, do the actual simulation.
 //
   NS_LOG_INFO ("Run Simulation.");
-  Simulator::Stop (Seconds (10.0));
+  Simulator::Stop (Seconds (100.0));
+
   Simulator::Run ();
   Simulator::Destroy ();
   NS_LOG_INFO ("Done.");
+
+  flowMonitor->SerializeToXmlFile("akul.xml", true, true);
 
   Ptr<PacketSink> sink1 = DynamicCast<PacketSink> (sinkApps.Get (0));
   std::cout << "Total Bytes Received: " << sink1->GetTotalRx () << std::endl;
