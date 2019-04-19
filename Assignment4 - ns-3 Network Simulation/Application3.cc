@@ -138,24 +138,37 @@ main (int argc, char *argv[])
   sinkApps.Start (Seconds (0.0));
   sinkApps.Stop (Seconds (10.0));
 
-
-  uint16_t cbrPort = 8000;
+//
+// Create CBR Agents
+//
   uint32_t packetSize = 512;
+  uint16_t cbrPort = 8000, n_cbr = 5;
+
+  ApplicationContainer cbr;
+  ApplicationContainer cbrSinkApps[n_cbr];
+
   OnOffHelper onOff ("ns3::UdpSocketFactory", InetSocketAddress (i.GetAddress(1), cbrPort));
   onOff.SetConstantRate (DataRate ("300Kbps"), packetSize);
 
-  ApplicationContainer cbr1;
-  cbr1.Add (onOff.Install (nodes.Get (0)));
+  PacketSinkHelper cbrSink ("ns3::UdpSocketFactory",
+                            InetSocketAddress (Ipv4Address::GetAny (), cbrPort));
+  for (uint16_t cbrIndex = 1; cbrIndex <= n_cbr; cbrIndex++)
+    {
+      onOff.SetAttribute ("Remote",
+                          AddressValue (InetSocketAddress (i.GetAddress(1), cbrPort+cbrIndex)));
 
-  // Start CBR
-  cbr1.Start (MilliSeconds (200.0));
-  cbr1.Stop (Seconds (10.0));
-
-  PacketSinkHelper sink11 ("ns3::UdpSocketFactory",
-                         InetSocketAddress (Ipv4Address::GetAny (), cbrPort));
-  ApplicationContainer sinkApps11 = sink11.Install (nodes.Get (1));
-  sinkApps11.Start (MilliSeconds (200.0));
-  sinkApps11.Stop (Seconds (10.0));
+      cbr = onOff.Install (nodes.Get (0));
+    
+      // Start CBR
+      cbr.Start (MilliSeconds (200.0 * cbrIndex));
+      cbr.Stop (Seconds (10.0));
+    
+      cbrSink.SetAttribute ("Local",
+                          AddressValue (InetSocketAddress (i.GetAddress(1), cbrPort+cbrIndex)));
+      cbrSinkApps[cbrIndex-1] = cbrSink.Install (nodes.Get (1));
+      cbrSinkApps[cbrIndex-1].Start (MilliSeconds (200.0 * cbrIndex));
+      cbrSinkApps[cbrIndex-1].Stop (Seconds (10.0));
+    }
 
 //
 // Set up tracing if enabled
@@ -184,8 +197,11 @@ main (int argc, char *argv[])
 
   flowMonitor->SerializeToXmlFile("Application3.xml", true, true);
 
-  Ptr<PacketSink> sink0 = DynamicCast<PacketSink> (sinkApps.Get (0));
-  std::cout << "Total Bytes Received on FTP Channel: " << sink0->GetTotalRx () << std::endl;
-  Ptr<PacketSink> sink1 = DynamicCast<PacketSink> (sinkApps11.Get (0));
-  std::cout << "Total Bytes Received on CBR1 Channel: " << sink1->GetTotalRx () << std::endl;
+  Ptr<PacketSink> sinkptr = DynamicCast<PacketSink> (sinkApps.Get (0));
+  std::cout << "Total Bytes Received on FTP Channel: " << sinkptr->GetTotalRx () << std::endl;
+  for (uint16_t cbrIndex = 1; cbrIndex <= n_cbr; cbrIndex++)
+    {
+      sinkptr = DynamicCast<PacketSink> (cbrSinkApps[cbrIndex-1].Get (0));
+      std::cout << "Total Bytes Received on CBR" << cbrIndex << " Channel: " << sinkptr->GetTotalRx () << std::endl;
+    }
 }
