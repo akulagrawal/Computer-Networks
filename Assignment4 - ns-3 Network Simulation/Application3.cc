@@ -138,50 +138,54 @@ main (int argc, char *argv[])
   sinkApps.Start (Seconds (0.0));
   sinkApps.Stop (Seconds (10.0));
 
+
+  uint16_t cbrPort = 8000;
+  uint32_t packetSize = 512;
+  OnOffHelper onOff ("ns3::UdpSocketFactory", InetSocketAddress (i.GetAddress(1), cbrPort));
+  onOff.SetConstantRate (DataRate ("300Kbps"), packetSize);
+
+  ApplicationContainer cbr1;
+  cbr1.Add (onOff.Install (nodes.Get (0)));
+
+  // Start CBR
+  cbr1.Start (MilliSeconds (200.0));
+  cbr1.Stop (Seconds (10.0));
+
+  PacketSinkHelper sink11 ("ns3::UdpSocketFactory",
+                         InetSocketAddress (Ipv4Address::GetAny (), cbrPort));
+  ApplicationContainer sinkApps11 = sink11.Install (nodes.Get (1));
+  sinkApps11.Start (MilliSeconds (200.0));
+  sinkApps11.Stop (Seconds (10.0));
+
 //
 // Set up tracing if enabled
 //
   if (tracing)
     {
       AsciiTraceHelper ascii;
-      pointToPoint.EnablePcapAll ("akul", false);  // void EnablePcapAll (std::string prefix, bool promiscuous = false);
+      pointToPoint.EnablePcapAll ("Application3", false);  // void EnablePcapAll (std::string prefix, bool promiscuous = false);
     }
 
-  // Flow monitor
+// Flow monitor
   Ptr<FlowMonitor> flowMonitor;
   FlowMonitorHelper flowHelper;
   flowMonitor = flowHelper.InstallAll();
 
-  uint16_t cbrPort = 8000;
-  OnOffHelper onOff ("ns3::UdpSocketFactory", InetSocketAddress (i.GetAddress(1), cbrPort));
-  uint32_t packetSize = 512;
-  onOff.SetConstantRate (300, packetSize);
-
-  ApplicationContainer cbr;
-  cbr.Add (onOff.Install (nodes.Get (0)));
-
-  // Start CBR
-  cbr.Start (MilliSeconds (0));
-  cbr.Stop (MilliSeconds (100));
-
-  PacketSinkHelper sink11 ("ns3::UdpSocketFactory",
-                         InetSocketAddress (Ipv4Address::GetAny (), cbrPort));
-  ApplicationContainer sinkApps11 = sink11.Install (nodes.Get (1));
-  sinkApps11.Start (MilliSeconds (0));
-  sinkApps11.Stop (MilliSeconds (100));
 
 //
 // Now, do the actual simulation.
 //
   NS_LOG_INFO ("Run Simulation.");
-  Simulator::Stop (Seconds (100.0));
+  Simulator::Stop (Seconds (10.0));
 
   Simulator::Run ();
   Simulator::Destroy ();
   NS_LOG_INFO ("Done.");
 
-  flowMonitor->SerializeToXmlFile("akul.xml", true, true);
+  flowMonitor->SerializeToXmlFile("Application3.xml", true, true);
 
-  Ptr<PacketSink> sink1 = DynamicCast<PacketSink> (sinkApps.Get (0));
-  std::cout << "Total Bytes Received: " << sink1->GetTotalRx () << std::endl;
+  Ptr<PacketSink> sink0 = DynamicCast<PacketSink> (sinkApps.Get (0));
+  std::cout << "Total Bytes Received on FTP Channel: " << sink0->GetTotalRx () << std::endl;
+  Ptr<PacketSink> sink1 = DynamicCast<PacketSink> (sinkApps11.Get (0));
+  std::cout << "Total Bytes Received on CBR1 Channel: " << sink1->GetTotalRx () << std::endl;
 }
