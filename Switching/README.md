@@ -3,7 +3,7 @@
 
 ## Run
 The same format as mentioned in the assignment:
-./Q1routing.exe −top top14.doc −conn NSFNET_100.doc −rt routingtable −ft forwardingtable -path pathsfile -flag dist -p 0
+`./Q1routing.exe −top top14.doc −conn NSFNET_100.doc −rt routingtable −ft forwardingtable -path pathsfile -flag dist -p 0`
 
 ## Output
 directory output/
