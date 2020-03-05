@@ -1,0 +1,2 @@
+14-node NSFNET: 0.44
+24-node ARPANET: 0.42

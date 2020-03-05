@@ -26,6 +26,7 @@ struct topology{
     double capacity;
     int bequivSum;
     int bmaxSum;
+    int dist;
 };
 
 int V;
@@ -70,6 +71,7 @@ void readTopologyData(string filename){
         temp.node1 = vfile[i];
         temp.node2 = vfile[i+1];
         temp.propDelay = vfile[i+2];
+        temp.dist = temp.propDelay;
         temp.capacity = vfile[i+3];
         temp.bequivSum = 0;
         temp.bmaxSum = 0;
@@ -82,7 +84,7 @@ void readTopologyData(string filename){
 
 int distance(topology top, bool flag){
     if(flag)
-        return top.propDelay;
+        return top.dist;
     return 1;
 }
 
@@ -365,12 +367,12 @@ void writeRoutingTable(string filename, vector<vector<vector<vector<int> > > > s
                 int x = topList[route[k]].node1;
                 if(x == l)
                     x = topList[route[k]].node2;
-                if(!isEntry[mp(l,mp(mp(x,route[k]),mp(topList[route[k]].propDelay,topList[route[k]].capacity)))]){
+                if(!isEntry[mp(l,mp(mp(x,route[k]),mp(topList[route[k]].dist,topList[route[k]].capacity)))]){
                     string name = filename+"_"+to_string(l)+".csv";
                     f.open(name.c_str(), ios::out | ios::app);
-                    f<<x<<","<<route[k]<<","<<topList[route[k]].propDelay<<","<<topList[route[k]].capacity<<"\n";
+                    f<<x<<","<<route[k]<<","<<topList[route[k]].dist<<","<<topList[route[k]].capacity<<"\n";
                     f.close();
-                    isEntry[mp(l,mp(mp(x,route[k]),mp(topList[route[k]].propDelay,topList[route[k]].capacity)))] = 1;
+                    isEntry[mp(l,mp(mp(x,route[k]),mp(topList[route[k]].dist,topList[route[k]].capacity)))] = 1;
                 }
                 l = x;
             }
@@ -457,8 +459,9 @@ int main(int argc, char** argv)
 
     readTopologyData(argv[2]);
     readConnectionData(argv[4]);
-    shortest = findShortestPaths(argv[12] != "hop");
-    shortest[2] = findLinkDisjointShortestPaths(argv[12] != "hop", shortest[0]);
+    bool flag = (bool)strcmp(argv[12], "hop");
+    shortest = findShortestPaths(flag);
+    shortest[2] = findLinkDisjointShortestPaths(flag, shortest[0]);
     //printPath(shortest);
     vector<int> v = setupConnections((bool)stoi(argv[14]), shortest);
     writeRoutingTable(outputDir+argv[6], shortest);
